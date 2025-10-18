@@ -3,18 +3,17 @@ import requests
 import google.generativeai as genai
 from bs4 import BeautifulSoup
 
-# --- Page Config ---
-st.set_page_config(page_title="📰 AI News Explorer", layout="wide")
+# --- Streamlit Config ---
+st.set_page_config(page_title="📰 AI News & Content Studio", layout="wide")
+st.title("📰 AI News & Content Studio")
+st.write("Fetch the latest news, and let AI craft professional content posts for you!")
 
-st.title("📰 AI News Explorer")
-st.write("Explore news by category and generate AI-powered content ideas!")
-
-# --- Load Secrets Safely ---
+# --- Load API Keys from Secrets ---
 try:
     NEWS_API_KEY = st.secrets["newsapi"]["key"]
     GOOGLE_AI_KEY = st.secrets["googleai"]["key"]
 except Exception:
-    st.error("❌ API keys missing. Please add them under 'Secrets' in Streamlit Cloud.")
+    st.error("❌ API keys not found. Please add them under 'Secrets' in Streamlit Cloud.")
     st.stop()
 
 # --- Configure Gemini ---
@@ -47,22 +46,24 @@ def fetch_news(api_key, country, category, query):
         st.error(f"Error fetching news: {e}")
     return []
 
+
 # --- Tab 1: News Feed ---
 with tab1:
-    st.sidebar.header("Filters")
-    country = st.sidebar.selectbox("Country", ["us", "in", "gb", "ca", "au"], index=1)
+    st.sidebar.header("🧭 Filters")
+    country = st.sidebar.selectbox("🌎 Country", ["us", "in", "gb", "ca", "au"], index=1)
     category = st.sidebar.selectbox(
-        "Category",
+        "🗂️ Category",
         ["business", "entertainment", "general", "health", "science", "sports", "technology"]
     )
     search_query = st.sidebar.text_input("🔍 Search News")
 
-    progress = st.progress(0, text="Starting...")
+    progress = st.progress(0, text="Starting News Fetch...")
 
-    progress.progress(20, text="🔍 Checking NewsAPI connection...")
+    progress.progress(25, text="🔍 Connecting to NewsAPI...")
     articles = fetch_news(NEWS_API_KEY, country, category, search_query)
 
-    progress.progress(80, text="✅ Fetch complete! Displaying news...")
+    progress.progress(60, text="📰 Processing fetched articles...")
+
     if not articles:
         st.warning("No news found.")
     else:
@@ -72,46 +73,72 @@ with tab1:
                 st.image(article['urlToImage'], use_column_width=True)
             st.write(article.get("description", ""))
             st.markdown("---")
-    progress.progress(100, text="✅ Done!")
+
+    progress.progress(100, text="✅ News Loaded Successfully!")
+
+    # Store top 3 headlines for AI use
+    st.session_state["top_headlines"] = [a["title"] for a in articles[:3]] if articles else []
+
 
 # --- Tab 2: AI Content Generator ---
 with tab2:
     st.header("🧠 AI Content Generator")
-    st.write("Turn latest news topics into professional content ideas!")
+    st.write("Generate content ideas based on any topic or from the latest news.")
 
-    news_topic = st.text_input("Enter a news topic or keyword (e.g., AI, climate, space):")
+    news_topic = st.text_input("Enter a topic manually (optional):")
 
-    if st.button("✨ Generate AI Content"):
-        if not news_topic:
-            st.warning("Please enter a topic.")
+    use_auto = st.checkbox("✨ Use Top 3 Latest Headlines from News Tab")
+
+    if st.button("🚀 Generate AI Content"):
+        topics_to_use = []
+
+        if use_auto and "top_headlines" in st.session_state and st.session_state["top_headlines"]:
+            topics_to_use = st.session_state["top_headlines"]
+            st.info(f"Using top 3 latest headlines: {topics_to_use}")
+        elif news_topic:
+            topics_to_use = [news_topic]
         else:
-            progress = st.progress(0, text="🚀 Connecting to Gemini AI...")
-            try:
-                model = genai.GenerativeModel("gemini-2.0-flash")  # ✅ free-tier supported
-                progress.progress(30, text="🤖 Generating ideas...")
+            st.warning("Please enter a topic or select the latest headlines option.")
+            st.stop()
+
+        progress = st.progress(0, text="🤖 Connecting to Gemini AI...")
+
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")  # ✅ Works with free-tier
+            all_outputs = []
+
+            for idx, topic in enumerate(topics_to_use):
+                progress.progress((idx + 1) * 30, text=f"✨ Generating content for: {topic}...")
 
                 prompt = f"""
-                You are a professional content strategist. Based on the news topic '{news_topic}',
+                You are a professional social media content strategist.
+                Based on the topic or headline: "{topic}",
                 generate:
-                1. A short engaging summary (2-3 lines)
-                2. 3 post ideas suitable for LinkedIn or Twitter
-                3. Suggested hashtags
-                4. A relevant free image URL suggestion (use unsplash.com or pexels.com)
+                1. A short 2-3 line engaging summary.
+                2. 3 creative post ideas for LinkedIn/Twitter.
+                3. 3-5 suitable hashtags.
+                4. Suggest a free image URL from Unsplash or Pexels related to this topic.
+                Make it professional yet catchy.
                 """
 
                 response = model.generate_content(prompt)
-                progress.progress(90, text="📝 Finalizing response...")
+                all_outputs.append((topic, response.text))
 
-                st.subheader("📄 AI Generated Content")
-                st.write(response.text)
+            progress.progress(100, text="✅ Content Generated Successfully!")
 
-                # Extract possible image suggestion
-                soup = BeautifulSoup(response.text, "html.parser")
-                links = [a['href'] for a in soup.find_all('a', href=True) if "unsplash" in a['href'] or "pexels" in a['href']]
+            # --- Display All Outputs ---
+            for topic, content in all_outputs:
+                st.subheader(f"🗞️ Topic: {topic}")
+                st.write(content)
+
+                # Extract free image links
+                soup = BeautifulSoup(content, "html.parser")
+                links = [a['href'] for a in soup.find_all('a', href=True)
+                         if "unsplash" in a['href'] or "pexels" in a['href']]
                 if links:
                     st.image(links[0], caption="Suggested Image", use_column_width=True)
-                progress.progress(100, text="✅ Content ready!")
+                st.markdown("---")
 
-            except Exception as e:
-                st.error(f"Error generating content: {e}")
-                progress.empty()
+        except Exception as e:
+            st.error(f"Error generating content: {e}")
+            progress.empty()
