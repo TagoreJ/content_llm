@@ -31,7 +31,6 @@ tab1, tab2 = st.tabs(["🗞️ News Explorer", "✍️ AI Content Generator"])
 with tab1:
     st.subheader("🌍 Explore Latest Headlines")
 
-    # Sidebar filters
     with st.sidebar:
         st.header("Filters")
         country = st.selectbox("Select Country", ["us", "in", "gb", "ca", "au"], index=1)
@@ -87,6 +86,7 @@ with tab1:
         else:
             st.success(f"✅ Found {len(articles)} news articles.")
             st.session_state["latest_articles"] = articles
+            st.session_state["selected_category"] = category
 
             for article in articles:
                 st.markdown(f"### [{article['title']}]({article['url']})")
@@ -110,7 +110,21 @@ with tab2:
 
         article_titles = [a["title"] for a in st.session_state["latest_articles"]]
         selected_title = st.selectbox("🗞️ Select a news article to generate content", article_titles)
-        tone = st.selectbox("✏️ Choose Writing Style", ["Professional", "Engaging", "Informative", "Creative"])
+
+        # ✅ Auto-detect tone based on category
+        category = st.session_state.get("selected_category", "general")
+        tone_map = {
+            "business": "Professional",
+            "entertainment": "Creative",
+            "health": "Informative",
+            "science": "Analytical",
+            "sports": "Motivational",
+            "technology": "Innovative",
+            "general": "Neutral"
+        }
+        detected_tone = tone_map.get(category, "Professional")
+
+        st.markdown(f"🧭 **Detected tone:** `{detected_tone}` based on category `{category}`")
         word_limit = st.slider("📏 Word Limit", 100, 400, 200)
 
         if st.button("✨ Generate Content"):
@@ -118,7 +132,7 @@ with tab2:
             status = st.empty()
             status.text("🔗 Connecting to Google AI...")
 
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
 
             chosen_article = next((a for a in st.session_state["latest_articles"] if a["title"] == selected_title), None)
 
@@ -127,8 +141,8 @@ with tab2:
             Title: {chosen_article['title']}
             Description: {chosen_article.get('description', '')}
 
-            Write a {tone.lower()} LinkedIn post or blog introduction (around {word_limit} words)
-            that sounds natural, insightful, and reader-friendly.
+            Write a {detected_tone.lower()} LinkedIn post or blog introduction (around {word_limit} words)
+            that sounds natural, engaging, and reader-friendly.
             """
 
             progress.progress(40)
@@ -145,7 +159,7 @@ with tab2:
             status.text("🖼️ Finding a matching free image...")
 
             query = selected_title.split()[0]
-            img_url = f"https://source.unsplash.com/800x400/?{query},{tone}"
+            img_url = f"https://source.unsplash.com/800x400/?{query},{category}"
             time.sleep(1)
 
             progress.progress(100)
