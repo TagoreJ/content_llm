@@ -3,3 +3,4 @@ GoogleNews==1.6.15
 pillow
 requests
 google-generativeai
+beautifulsoup4
