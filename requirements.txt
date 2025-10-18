@@ -2,3 +2,4 @@ streamlit==1.50.0
 GoogleNews==1.6.15
 pillow
 requests
+google-generativeai
